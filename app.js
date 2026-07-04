@@ -1,8 +1,3 @@
-import {
-  FilesetResolver,
-  PoseLandmarker
-} from "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.26";
-
 const video = document.querySelector("#camera");
 const canvas = document.querySelector("#overlay");
 const ctx = canvas.getContext("2d");
@@ -19,6 +14,7 @@ const nextBtn = document.querySelector("#nextBtn");
 const shotBtn = document.querySelector("#shotBtn");
 const saveTinyBtn = document.querySelector("#saveTinyBtn");
 const memeGrid = document.querySelector("#memeGrid");
+const visionVersion = "0.10.26";
 
 const poseConnections = [
   [11, 12], [11, 13], [13, 15], [12, 14], [14, 16],
@@ -67,6 +63,7 @@ let lastSwitch = 0;
 let poseLandmarker = null;
 let running = false;
 let lastVideoTime = -1;
+let mediaPipeModule = null;
 
 renderLibrary();
 setMeme(0, "Дефолтный мем");
@@ -79,25 +76,12 @@ memeFiles.addEventListener("change", addMemes);
 
 async function startCamera() {
   startBtn.disabled = true;
-  startBtn.textContent = "Загружаю модель...";
+  startBtn.textContent = "Запрашиваю камеру...";
 
   try {
-    const vision = await FilesetResolver.forVisionTasks(
-      "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.26/wasm"
-    );
-
-    poseLandmarker = await PoseLandmarker.createFromOptions(vision, {
-      baseOptions: {
-        modelAssetPath:
-          "https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_lite/float16/latest/pose_landmarker_lite.task",
-        delegate: "GPU"
-      },
-      runningMode: "VIDEO",
-      numPoses: 1,
-      minPoseDetectionConfidence: 0.55,
-      minPosePresenceConfidence: 0.55,
-      minTrackingConfidence: 0.55
-    });
+    if (!navigator.mediaDevices?.getUserMedia) {
+      throw new Error("Браузер не дает доступ к камере. Открой ссылку в Safari/Chrome, не внутри Threads/Instagram.");
+    }
 
     const stream = await navigator.mediaDevices.getUserMedia({
       video: { facingMode: "user", width: { ideal: 1280 }, height: { ideal: 720 } },
@@ -107,14 +91,66 @@ async function startCamera() {
     video.srcObject = stream;
     await video.play();
     permission.classList.add("hidden");
+
+    memeReason.textContent = "Камера включена, загружаю модель трекинга...";
+    poseLandmarker = await createPoseLandmarker();
+
     running = true;
     requestAnimationFrame(loop);
   } catch (error) {
     console.error(error);
     startBtn.disabled = false;
     startBtn.textContent = "Попробовать снова";
-    memeReason.textContent = "Камера или модель не запустились. Открой страницу через HTTPS или localhost.";
+    memeReason.textContent = error.message || "Камера или модель не запустились. Открой страницу через HTTPS или localhost.";
   }
+}
+
+async function createPoseLandmarker() {
+  startBtn.textContent = "Загружаю модель...";
+
+  const { FilesetResolver, PoseLandmarker } = await loadMediaPipe();
+  const vision = await FilesetResolver.forVisionTasks(
+    `https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@${visionVersion}/wasm`
+  );
+
+  const options = {
+    baseOptions: {
+      modelAssetPath:
+        "https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_lite/float16/latest/pose_landmarker_lite.task",
+      delegate: "GPU"
+    },
+    runningMode: "VIDEO",
+    numPoses: 1,
+    minPoseDetectionConfidence: 0.55,
+    minPosePresenceConfidence: 0.55,
+    minTrackingConfidence: 0.55
+  };
+
+  try {
+    return await PoseLandmarker.createFromOptions(vision, options);
+  } catch (error) {
+    console.warn("GPU delegate failed, retrying with CPU.", error);
+    return PoseLandmarker.createFromOptions(vision, {
+      ...options,
+      baseOptions: {
+        ...options.baseOptions,
+        delegate: "CPU"
+      }
+    });
+  }
+}
+
+async function loadMediaPipe() {
+  if (mediaPipeModule) return mediaPipeModule;
+
+  try {
+    mediaPipeModule = await import(`https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@${visionVersion}`);
+  } catch (firstError) {
+    console.warn("Primary MediaPipe import failed, retrying with +esm.", firstError);
+    mediaPipeModule = await import(`https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@${visionVersion}/+esm`);
+  }
+
+  return mediaPipeModule;
 }
 
 function loop() {
