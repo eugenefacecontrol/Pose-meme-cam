@@ -2,6 +2,8 @@
 
 Статическое приложение для GitHub Pages: камера, MediaPipe Pose Landmarker, оверлей точек тела и нижний блок с мемом.
 
+Live: https://eugenefacecontrol.github.io/Pose-meme-cam/
+
 ## Как работает
 
 - Камера обрабатывается в браузере, видео никуда не отправляется.
