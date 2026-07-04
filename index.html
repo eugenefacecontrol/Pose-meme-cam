@@ -1,0 +1,109 @@
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Pose Meme Cam</title>
+    <link rel="stylesheet" href="styles.css">
+  </head>
+  <body>
+    <main class="app">
+      <section class="stage" aria-label="Генератор мемов по позе">
+        <div class="retro-desktop">
+          <div class="browser-top" aria-hidden="true">
+            <span></span><span></span><span></span>
+            <div class="fake-address"></div>
+          </div>
+
+          <nav class="desktop-icons" aria-label="Разделы">
+            <span>💻<small>Мой комп</small></span>
+            <span>🖼️<small>Мемы</small></span>
+            <span>📁<small>Папка</small></span>
+            <span>🌐<small>Web</small></span>
+            <span>❔<small>Help</small></span>
+          </nav>
+
+          <div class="window camera-window">
+            <div class="titlebar">
+              <strong>摄像头</strong>
+              <span id="poseLabel">нейтрально</span>
+              <div class="window-buttons"><i></i><i></i><i></i></div>
+            </div>
+            <div class="camera-wrap">
+              <video id="camera" playsinline muted></video>
+              <canvas id="overlay"></canvas>
+              <p class="camera-subtitle">Этот сайт немного смешной...</p>
+              <div class="permission" id="permission">
+                <h1>Pose Meme Cam</h1>
+                <p>Поставь позу, а сайт подберет мем как «пакет эмоций».</p>
+                <button id="startBtn" type="button">Включить камеру</button>
+              </div>
+            </div>
+          </div>
+
+          <aside class="window meme-panel" aria-label="Выбранный мем">
+            <div class="titlebar">
+              <strong>表情包</strong>
+              <button type="button" id="saveTinyBtn">保存</button>
+            </div>
+            <div class="meme-frame">
+              <img id="memeImage" alt="Выбранный мем">
+              <div class="meme-caption">
+                <span id="memeTitle">Готово к старту</span>
+                <small id="memeReason">Нажми «Включить камеру»</small>
+              </div>
+            </div>
+          </aside>
+
+          <div class="retro-status">
+            <button type="button">开始</button>
+            <span>📷 камера</span>
+            <span>🙂 эмоции</span>
+            <span>🎲 мем</span>
+          </div>
+        </div>
+      </section>
+
+      <section class="controls" aria-label="Управление">
+        <div class="control-group">
+          <label for="mode">Режим</label>
+          <select id="mode">
+            <option value="smart">По позе</option>
+            <option value="random">Случайно</option>
+            <option value="manual">Вручную</option>
+          </select>
+        </div>
+
+        <div class="control-group">
+          <label for="tagForUploads">Тег для загрузки</label>
+          <select id="tagForUploads">
+            <option value="any">Любой</option>
+            <option value="hands_up">Руки вверх</option>
+            <option value="t_pose">T-pose</option>
+            <option value="pointing">Указание</option>
+            <option value="thinking">Думает</option>
+            <option value="close">Близко к камере</option>
+          </select>
+        </div>
+
+        <label class="file-btn">
+          Добавить мемы
+          <input id="memeFiles" type="file" accept="image/*" multiple>
+        </label>
+
+        <button id="nextBtn" type="button">Следующий</button>
+        <button id="shotBtn" type="button">Скачать кадр</button>
+      </section>
+
+      <section class="library" aria-label="Библиотека мемов">
+        <div class="library-head">
+          <h2>Мемы</h2>
+          <p>Можно просто закинуть пачку картинок. Для умного подбора лучше дать им теги.</p>
+        </div>
+        <div id="memeGrid" class="meme-grid"></div>
+      </section>
+    </main>
+
+    <script type="module" src="app.js"></script>
+  </body>
+</html>
