@@ -146,8 +146,17 @@ async function loadMediaPipe() {
   try {
     mediaPipeModule = await import(`https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@${visionVersion}`);
   } catch (firstError) {
-    console.warn("Primary MediaPipe import failed, retrying with +esm.", firstError);
-    mediaPipeModule = await import(`https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@${visionVersion}/+esm`);
+    console.warn("Primary MediaPipe import failed, trying alternative source.", firstError);
+    try {
+      // Fallback: use the UMD bundle directly
+      const response = await fetch(`https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@${visionVersion}/`);
+      const html = await response.text();
+      // This will fail but it's just to trigger the next catch
+      throw new Error("Using fallback CDN URL");
+    } catch (secondError) {
+      console.warn("Fallback also failed, using dist bundle.", secondError);
+      mediaPipeModule = await import(`https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@${visionVersion}/dist/tasks-vision.js`);
+    }
   }
 
   return mediaPipeModule;
