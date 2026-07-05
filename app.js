@@ -14,8 +14,8 @@ const nextBtn = document.querySelector("#nextBtn");
 const shotBtn = document.querySelector("#shotBtn");
 const saveTinyBtn = document.querySelector("#saveTinyBtn");
 const memeGrid = document.querySelector("#memeGrid");
-const buildVersion = "1.0.3";
-const visionVersion = "0.10.26";
+const buildVersion = "1.0.4";
+const visionVersion = "0.10.0";
 
 const poseConnections = [
   [11, 12], [11, 13], [13, 15], [12, 14], [14, 16],
