@@ -196,8 +196,6 @@ function drawPose(landmarks) {
   const h = canvas.height;
 
   ctx.save();
-  ctx.translate(w, 0);
-  ctx.scale(-1, 1);
   ctx.lineCap = "round";
   ctx.lineJoin = "round";
 
@@ -208,8 +206,8 @@ function drawPose(landmarks) {
     const p2 = landmarks[b];
     if (isVisible(p1) && isVisible(p2)) {
       ctx.beginPath();
-      ctx.moveTo(p1.x * w, p1.y * h);
-      ctx.lineTo(p2.x * w, p2.y * h);
+      ctx.moveTo((1 - p1.x) * w, p1.y * h);
+      ctx.lineTo((1 - p2.x) * w, p2.y * h);
       ctx.stroke();
     }
   }
@@ -218,7 +216,7 @@ function drawPose(landmarks) {
     if (!isVisible(point)) continue;
     ctx.beginPath();
     ctx.fillStyle = "rgba(56, 189, 248, 0.95)";
-    ctx.arc(point.x * w, point.y * h, Math.max(4, w / 190), 0, Math.PI * 2);
+    ctx.arc((1 - point.x) * w, point.y * h, Math.max(4, w / 190), 0, Math.PI * 2);
     ctx.fill();
     ctx.lineWidth = 2;
     ctx.strokeStyle = "rgba(0, 0, 0, 0.65)";
