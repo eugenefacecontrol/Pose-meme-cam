@@ -14,7 +14,7 @@ const nextBtn = document.querySelector("#nextBtn");
 const shotBtn = document.querySelector("#shotBtn");
 const saveTinyBtn = document.querySelector("#saveTinyBtn");
 const memeGrid = document.querySelector("#memeGrid");
-const buildVersion = "1.0.2";
+const buildVersion = "1.0.3";
 const visionVersion = "0.10.26";
 
 const poseConnections = [
@@ -64,7 +64,6 @@ let lastSwitch = 0;
 let poseLandmarker = null;
 let running = false;
 let lastVideoTime = -1;
-let mediaPipeModule = null;
 
 console.log(`Pose Meme Cam v${buildVersion} - MediaPipe v${visionVersion}`);
 
@@ -111,7 +110,7 @@ async function startCamera() {
 async function createPoseLandmarker() {
   startBtn.textContent = "Загружаю модель...";
 
-  const { FilesetResolver, PoseLandmarker } = await loadMediaPipe();
+  const { FilesetResolver, PoseLandmarker } = window.MediaPipe;
   const vision = await FilesetResolver.forVisionTasks(
     `https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@${visionVersion}/wasm`
   );
@@ -144,28 +143,36 @@ async function createPoseLandmarker() {
 }
 
 async function loadMediaPipe() {
-  if (mediaPipeModule) return mediaPipeModule;
-
-  const urls = [
-    `https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@${visionVersion}`,
-    `https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@${visionVersion}/dist/tasks-vision.js`
-  ];
-
-  for (const url of urls) {
-    try {
-      console.log(`Trying to load MediaPipe from: ${url}`);
-      mediaPipeModule = await import(url);
-      console.log(`Successfully loaded MediaPipe from: ${url}`);
-      return mediaPipeModule;
-    } catch (error) {
-      console.warn(`Failed to load from ${url}:`, error.message);
-    }
+  if (window.MediaPipe) {
+    console.log("MediaPipe уже загружен");
+    return window.MediaPipe;
   }
 
-  throw new Error(
-    `Не удалось загрузить MediaPipe с никакого источника. Проверь интернет и консоль браузера.`
-  );
+  return new Promise((resolve, reject) => {
+    console.log(`Загружаю MediaPipe v${visionVersion}...`);
+    
+    const script = document.createElement("script");
+    script.src = `https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@${visionVersion}`;
+    script.type = "module";
+    script.onload = () => {
+      console.log("MediaPipe загружен успешно");
+      if (window.MediaPipe) {
+        resolve(window.MediaPipe);
+      } else {
+        reject(new Error("window.MediaPipe не определен после загрузки скрипта"));
+      }
+    };
+    script.onerror = () => {
+      reject(new Error(`Ошибка загрузки MediaPipe с ${script.src}`));
+    };
+    document.head.appendChild(script);
+  });
 }
+
+// Загружаем MediaPipe при загрузке страницы
+loadMediaPipe().catch(error => {
+  console.error("Критическая ошибка загрузки MediaPipe:", error);
+});
 
 function loop() {
   if (!running) return;
