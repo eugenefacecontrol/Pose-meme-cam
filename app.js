@@ -14,6 +14,7 @@ const nextBtn = document.querySelector("#nextBtn");
 const shotBtn = document.querySelector("#shotBtn");
 const saveTinyBtn = document.querySelector("#saveTinyBtn");
 const memeGrid = document.querySelector("#memeGrid");
+const buildVersion = "1.0.2";
 const visionVersion = "0.10.26";
 
 const poseConnections = [
@@ -64,6 +65,8 @@ let poseLandmarker = null;
 let running = false;
 let lastVideoTime = -1;
 let mediaPipeModule = null;
+
+console.log(`Pose Meme Cam v${buildVersion} - MediaPipe v${visionVersion}`);
 
 renderLibrary();
 setMeme(0, "Дефолтный мем");
@@ -143,23 +146,25 @@ async function createPoseLandmarker() {
 async function loadMediaPipe() {
   if (mediaPipeModule) return mediaPipeModule;
 
-  try {
-    mediaPipeModule = await import(`https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@${visionVersion}`);
-  } catch (firstError) {
-    console.warn("Primary MediaPipe import failed, trying alternative source.", firstError);
+  const urls = [
+    `https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@${visionVersion}`,
+    `https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@${visionVersion}/dist/tasks-vision.js`
+  ];
+
+  for (const url of urls) {
     try {
-      // Fallback: use the UMD bundle directly
-      const response = await fetch(`https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@${visionVersion}/`);
-      const html = await response.text();
-      // This will fail but it's just to trigger the next catch
-      throw new Error("Using fallback CDN URL");
-    } catch (secondError) {
-      console.warn("Fallback also failed, using dist bundle.", secondError);
-      mediaPipeModule = await import(`https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@${visionVersion}/dist/tasks-vision.js`);
+      console.log(`Trying to load MediaPipe from: ${url}`);
+      mediaPipeModule = await import(url);
+      console.log(`Successfully loaded MediaPipe from: ${url}`);
+      return mediaPipeModule;
+    } catch (error) {
+      console.warn(`Failed to load from ${url}:`, error.message);
     }
   }
 
-  return mediaPipeModule;
+  throw new Error(
+    `Не удалось загрузить MediaPipe с никакого источника. Проверь интернет и консоль браузера.`
+  );
 }
 
 function loop() {
