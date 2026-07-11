@@ -3,6 +3,7 @@ const canvas = document.querySelector("#overlay");
 const ctx = canvas.getContext("2d");
 const permission = document.querySelector("#permission");
 const startBtn = document.querySelector("#startBtn");
+const startStatus = document.querySelector("#startStatus");
 const memeImage = document.querySelector("#memeImage");
 const memeTitle = document.querySelector("#memeTitle");
 const memeReason = document.querySelector("#memeReason");
@@ -14,7 +15,8 @@ const nextBtn = document.querySelector("#nextBtn");
 const shotBtn = document.querySelector("#shotBtn");
 const saveTinyBtn = document.querySelector("#saveTinyBtn");
 const memeGrid = document.querySelector("#memeGrid");
-const buildVersion = "1.0.6";
+const buildVersion = "1.0.7";
+const visionVersion = "0.10.35";
 
 const poseConnections = [
   [11, 12], [11, 13], [13, 15], [12, 14], [14, 16],
@@ -63,6 +65,7 @@ let lastSwitch = 0;
 let poseLandmarker = null;
 let running = false;
 let lastVideoTime = -1;
+let mediaPipeModule = null;
 
 console.log(`Pose Meme Cam v${buildVersion}`);
 
@@ -78,8 +81,13 @@ memeFiles.addEventListener("change", addMemes);
 async function startCamera() {
   startBtn.disabled = true;
   startBtn.textContent = "Запрашиваю камеру...";
+  startStatus.textContent = "Разреши доступ к камере в системном окне.";
 
   try {
+    if (!window.isSecureContext) {
+      throw new Error("Камера работает только по HTTPS. Открой GitHub Pages-ссылку напрямую в Safari или Chrome.");
+    }
+
     if (!navigator.mediaDevices?.getUserMedia) {
       throw new Error("Браузер не дает доступ к камере. Открой ссылку в Safari/Chrome, не внутри Threads/Instagram.");
     }
@@ -91,82 +99,36 @@ async function startCamera() {
 
     video.srcObject = stream;
     await video.play();
-    permission.classList.add("hidden");
 
+    startBtn.textContent = "Загружаю модель...";
+    startStatus.textContent = "Камера включена. Загружаю распознавание позы...";
     memeReason.textContent = "Камера включена, загружаю модель трекинга...";
-    
-    // Загружаем MediaPipe если ещё не загружен
-    if (!window.MediaPipe) {
-      memeReason.textContent = "Камера включена, загружаю MediaPipe...";
-      await loadMediaPipeAsync();
-    }
-
     poseLandmarker = await createPoseLandmarker();
 
+    permission.classList.add("hidden");
     running = true;
     requestAnimationFrame(loop);
   } catch (error) {
     console.error(error);
+    stopCameraStream();
     startBtn.disabled = false;
     startBtn.textContent = "Попробовать снова";
-    memeReason.textContent = error.message || "Камера или модель не запустились. Открой страницу через HTTPS или localhost.";
+    const message = describeStartError(error);
+    startStatus.textContent = message;
+    memeReason.textContent = message;
   }
-}
-
-// Загружаем MediaPipe скрипт асинхронно
-function loadMediaPipeAsync() {
-  return new Promise((resolve, reject) => {
-    // Таймаут 60 секунд
-    const timeout = setTimeout(() => {
-      reject(new Error("Таймаут загрузки MediaPipe (60с)"));
-    }, 60000);
-
-    console.log("Загружаю MediaPipe...");
-    
-    const script = document.createElement("script");
-    script.src = "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.0/wasm/vision_wasm_internal.js";
-    script.type = "text/javascript";
-    
-    script.onload = () => {
-      clearTimeout(timeout);
-      console.log("Скрипт MediaPipe загружен");
-      resolve();
-    };
-    
-    script.onerror = () => {
-      clearTimeout(timeout);
-      reject(new Error("Ошибка загрузки MediaPipe скрипта"));
-    };
-    
-    document.head.appendChild(script);
-  });
 }
 
 async function createPoseLandmarker() {
-  startBtn.textContent = "Загружаю модель...";
-
-  // Ждём загрузки MediaPipe если нужно
-  let attempts = 0;
-  while (!window.MediaPipe || !window.MediaPipe.FilesetResolver) {
-    if (attempts > 600) { // 60 секунд (100ms * 600)
-      throw new Error("Таймаут загрузки MediaPipe");
-    }
-    console.log("Ожидаю MediaPipe...", attempts);
-    await new Promise(resolve => setTimeout(resolve, 100));
-    attempts++;
-  }
-
-  console.log("MediaPipe готов к использованию");
-  const { FilesetResolver, PoseLandmarker } = window.MediaPipe;
-  
+  const { FilesetResolver, PoseLandmarker } = await loadMediaPipe();
   const vision = await FilesetResolver.forVisionTasks(
-    "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.0/wasm"
+    `https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@${visionVersion}/wasm`
   );
 
   const options = {
     baseOptions: {
       modelAssetPath:
-        "https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_lite/float16/latest/pose_landmarker_lite.task",
+        "https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_lite/float16/1/pose_landmarker_lite.task",
       delegate: "GPU"
     },
     runningMode: "VIDEO",
@@ -182,12 +144,48 @@ async function createPoseLandmarker() {
     console.warn("GPU delegate failed, retrying with CPU.", error);
     return PoseLandmarker.createFromOptions(vision, {
       ...options,
-      baseOptions: {
-        ...options.baseOptions,
-        delegate: "CPU"
-      }
+      baseOptions: { ...options.baseOptions, delegate: "CPU" }
     });
   }
+}
+
+async function loadMediaPipe() {
+  if (mediaPipeModule) return mediaPipeModule;
+
+  const imported = await import(
+    "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.35/+esm"
+  );
+  const fallback = imported.default || {};
+  const FilesetResolver = imported.FilesetResolver || fallback.FilesetResolver;
+  const PoseLandmarker = imported.PoseLandmarker || fallback.PoseLandmarker;
+
+  if (!FilesetResolver || !PoseLandmarker) {
+    throw new Error("MediaPipe загрузился в неподдерживаемом формате.");
+  }
+
+  mediaPipeModule = { FilesetResolver, PoseLandmarker };
+  return mediaPipeModule;
+}
+
+function stopCameraStream() {
+  const stream = video.srcObject;
+  if (stream) {
+    for (const track of stream.getTracks()) track.stop();
+  }
+  video.srcObject = null;
+}
+
+function describeStartError(error) {
+  if (error?.name === "NotAllowedError") {
+    return "Доступ к камере запрещен. Разреши камеру для этого сайта в настройках Safari/Chrome.";
+  }
+  if (error?.name === "NotFoundError") {
+    return "На устройстве не найдена доступная камера.";
+  }
+  if (error?.name === "NotReadableError") {
+    return "Камера занята другим приложением. Закрой его и попробуй снова.";
+  }
+  return error?.message || "Не удалось запустить камеру или модель распознавания.";
 }
 
 function loop() {
