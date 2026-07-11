@@ -15,7 +15,7 @@ const nextBtn = document.querySelector("#nextBtn");
 const shotBtn = document.querySelector("#shotBtn");
 const saveTinyBtn = document.querySelector("#saveTinyBtn");
 const memeGrid = document.querySelector("#memeGrid");
-const buildVersion = "1.0.7";
+const buildVersion = "1.0.8";
 const visionVersion = "0.10.35";
 
 const poseConnections = [
@@ -65,7 +65,11 @@ let lastSwitch = 0;
 let poseLandmarker = null;
 let running = false;
 let lastVideoTime = -1;
+let lastDetectionAt = 0;
 let mediaPipeModule = null;
+let pendingPoseTag = null;
+let pendingPoseSince = 0;
+let activePoseTag = "any";
 
 console.log(`Pose Meme Cam v${buildVersion}`);
 
@@ -192,23 +196,34 @@ function loop() {
   if (!running) return;
 
   resizeCanvas();
-  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  const now = performance.now();
+  const hasNewFrame = video.currentTime !== lastVideoTime;
+  const detectionDue = now - lastDetectionAt >= 66;
 
-  if (video.currentTime !== lastVideoTime && poseLandmarker) {
-    const result = poseLandmarker.detectForVideo(video, performance.now());
-    const landmarks = result.landmarks?.[0];
-
-    if (landmarks) {
-      drawPose(landmarks);
-      const pose = classifyPose(landmarks);
-      poseLabel.textContent = pose.label;
-      maybeSelectMeme(pose);
-    } else {
-      memeReason.textContent = "Ищу человека в кадре";
-      poseLabel.textContent = "поиск";
-    }
-
+  if (hasNewFrame && detectionDue && poseLandmarker) {
     lastVideoTime = video.currentTime;
+    lastDetectionAt = now;
+
+    try {
+      const result = poseLandmarker.detectForVideo(video, now);
+      const landmarks = result.landmarks?.[0];
+
+      // Keep the previous drawing between camera frames. Clearing on every
+      // display frame made the skeleton alternate between visible and blank.
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+      if (landmarks) {
+        drawPose(landmarks);
+        const pose = classifyPose(landmarks);
+        poseLabel.textContent = pose.label;
+        maybeSelectMeme(pose);
+      } else {
+        memeReason.textContent = "Ищу человека в кадре";
+        poseLabel.textContent = "поиск";
+      }
+    } catch (error) {
+      console.error("Pose detection failed", error);
+    }
   }
 
   requestAnimationFrame(loop);
@@ -301,30 +316,42 @@ function maybeSelectMeme(pose) {
     return;
   }
 
-  if (now - lastSwitch < 1500) {
-    return;
-  }
-
   if (mode === "random") {
-    pickNext("Случайный режим", true);
-    lastSwitch = now;
+    if (now - lastSwitch >= 3000) {
+      pickNext("Случайный режим", true);
+      lastSwitch = now;
+    }
     return;
   }
 
-  const candidates = memes
-    .map((meme, index) => ({ meme, index }))
-    .filter(({ meme }) => meme.tags.includes(pose.tag) || meme.tags.includes("any"));
-
-  if (!candidates.length) return;
-
-  const exact = candidates.filter(({ meme }) => meme.tags.includes(pose.tag));
-  const pool = exact.length ? exact : candidates;
-  const choice = pool[Math.floor(Math.random() * pool.length)];
-
-  if (choice.index !== activeMeme || now - lastSwitch > 4500) {
-    setMeme(choice.index, pose.reason);
-    lastSwitch = now;
+  if (pose.tag !== pendingPoseTag) {
+    pendingPoseTag = pose.tag;
+    pendingPoseSince = now;
+    return;
   }
+
+  // Ignore short classification jumps around gesture boundaries.
+  if (now - pendingPoseSince < 600 || pose.tag === activePoseTag) {
+    return;
+  }
+
+  const exact = memes
+    .map((meme, index) => ({ meme, index }))
+    .filter(({ meme }) => meme.tags.includes(pose.tag));
+  const fallback = memes
+    .map((meme, index) => ({ meme, index }))
+    .filter(({ meme }) => meme.tags.includes("any"));
+  const pool = exact.length ? exact : fallback;
+
+  if (!pool.length) return;
+
+  const alternatives = pool.filter(({ index }) => index !== activeMeme);
+  const choices = alternatives.length ? alternatives : pool;
+  const choice = choices[Math.floor(Math.random() * choices.length)];
+
+  setMeme(choice.index, pose.reason);
+  activePoseTag = pose.tag;
+  lastSwitch = now;
 }
 
 function pickNext(reason, force) {
